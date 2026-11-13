@@ -1115,6 +1115,7 @@ static void peer_free(struct peer *peer)
 	XFREE(MTYPE_TMP, peer->notify.data);
 	memset(&peer->notify, 0, sizeof(struct bgp_notify));
 
+	bgp_clear_node_queue_untrack(peer);
 	if (peer->clear_node_queue)
 		work_queue_free_and_null(&peer->clear_node_queue);
 
@@ -2261,6 +2262,14 @@ int peer_delete(struct peer *peer)
 
 	UNSET_FLAG(peer->sflags, PEER_STATUS_ACCEPT_PEER);
 	bgp_fsm_change_status(peer, Deleted);
+
+	/*
+	 * Outside shutdown the change to Deleted above may have queued
+	 * clear-node work that holds a peer lock. Once the peer leaves
+	 * bgp->peer below, that queue is the only thing that can reach it.
+	 */
+	if (!bm->terminating)
+		bgp_clear_node_queue_track(peer);
 
 	/* Remove from NHT */
 	if (CHECK_FLAG(peer->flags, PEER_FLAG_CONFIG_NODE))
@@ -7892,6 +7901,7 @@ void bgp_master_init(struct thread_master *master)
 
 	bm = &bgp_master;
 	bm->bgp = list_new();
+	bm->clearing_peers = list_new();
 	bm->listen_sockets = list_new();
 	bm->port = BGP_PORT_DEFAULT;
 	bm->master = master;

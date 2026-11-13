@@ -464,8 +464,33 @@ extern void bgp_clear_stale_route(struct peer *, afi_t, safi_t);
 extern int bgp_outbound_policy_exists(struct peer *, struct bgp_filter *);
 extern int bgp_inbound_policy_exists(struct peer *, struct bgp_filter *);
 
+<<<<<<< HEAD
 extern struct bgp_node *bgp_afi_node_get(struct bgp_table *table, afi_t afi,
 					 safi_t safi, struct prefix *p,
+=======
+/*
+ * If this peer is configured for soft reconfig in then do the work
+ * and return true.  If it is not return false; and do nothing
+ */
+extern bool bgp_soft_reconfig_in(struct peer *peer, afi_t afi, safi_t safi);
+extern void bgp_clear_route(struct peer *peer, afi_t afi, safi_t safi);
+extern void bgp_clear_route_all(struct peer *peer);
+extern bool bgp_clear_node_queue_drain(struct peer *peer);
+extern void bgp_clear_node_queue_track(struct peer *peer);
+extern void bgp_clear_node_queue_untrack(struct peer *peer);
+extern void bgp_clear_node_queue_drain_orphans(void);
+/* Clear routes for a batch of peers */
+void bgp_clear_route_batch(struct bgp_clearing_info *cinfo);
+
+extern void bgp_clear_adj_in(struct peer *peer, afi_t afi, safi_t safi);
+extern void bgp_clear_stale_route(struct peer *peer, afi_t afi, safi_t safi);
+extern void bgp_set_stale_route(struct peer *peer, afi_t afi, safi_t safi);
+extern bool bgp_outbound_policy_exists(struct peer *peer, struct bgp_filter *filter);
+extern bool bgp_inbound_policy_exists(struct peer *peer, struct bgp_filter *filter);
+
+extern struct bgp_dest *bgp_afi_node_get(struct bgp_table *table, afi_t afi,
+					 safi_t safi, const struct prefix *p,
+>>>>>>> 7c25b46acc (NOS-23263: [bgpd] drain deleted peers' clear-node queues at shutdown (#438))
 					 struct prefix_rd *prd);
 extern struct bgp_path_info *bgp_path_info_lock(struct bgp_path_info *path);
 extern struct bgp_path_info *bgp_path_info_unlock(struct bgp_path_info *path);

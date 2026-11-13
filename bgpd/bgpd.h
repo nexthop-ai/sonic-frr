@@ -157,7 +157,56 @@ struct bgp_master {
 	struct bgp* bgp_evpn;
 
 	bool terminating;	/* global flag that sigint terminate seen */
+<<<<<<< HEAD
 	QOBJ_FIELDS
+=======
+
+	/*
+	 * Peers already unlinked from bgp->peer that are kept alive only by
+	 * a pending clear-node queue (see bgp_clear_node_queue_track()).
+	 */
+	struct list *clearing_peers;
+
+	/* TOS value for outgoing packets in BGP connections */
+	uint8_t ip_tos;
+
+#define BM_DEFAULT_Q_LIMIT 10000
+	uint32_t inq_limit;
+	uint32_t outq_limit;
+
+	struct event *t_bgp_sync_label_manager;
+	struct event *t_bgp_start_label_manager;
+
+	struct event *t_bgp_zebra_route;
+
+	bool v6_with_v4_nexthops;
+
+	/* zebra's dataplane carries nexthop groups; routes go by group id */
+	bool zebra_use_nhg;
+
+	/* To preserve ordering of installations into zebra across all Vrfs */
+	struct zebra_announce_head zebra_announce_head;
+	struct zebra_announce_head zebra_announce_early_head;
+
+	struct event *t_bgp_zebra_l2_vni;
+	/* To preserve ordering of processing of L2 VNIs in BGP */
+	struct zebra_l2_vni_head zebra_l2_vni_head;
+
+	/* ID value for peer clearing batches */
+	uint32_t peer_clearing_batch_id;
+
+	/* Limits for batched peer clearing code:
+	 * Max number of errored peers to process without rescheduling
+	 */
+	uint32_t peer_conn_errs_dequeue_limit;
+	/* Limit the number of clearing dests we'll process per callback */
+	uint32_t peer_clearing_batch_max_dests;
+
+	/* Event history rings and peer identity table (bgp_evhist.c) */
+	struct bgp_evhist *evhist;
+
+	QOBJ_FIELDS;
+>>>>>>> 7c25b46acc (NOS-23263: [bgpd] drain deleted peers' clear-node queues at shutdown (#438))
 };
 DECLARE_QOBJ_TYPE(bgp_master)
 
@@ -1038,6 +1087,12 @@ struct peer {
 #define PEER_THREAD_KEEPALIVES_ON     (1 << 2)
 	/* workqueues */
 	struct work_queue *clear_node_queue;
+	/*
+	 * Node in bm->clearing_peers while this peer is tracked, or NULL.
+	 * Stashed so untrack is O(1); bgp_clear_node_complete() runs for
+	 * every peer that finishes clearing, most of which were never tracked.
+	 */
+	struct listnode *clearing_node;
 
 #define PEER_TOTAL_RX(peer)                                                    \
 	atomic_load_explicit(&peer->open_in, memory_order_relaxed)             \

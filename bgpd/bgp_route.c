@@ -3942,6 +3942,8 @@ static void bgp_clear_node_complete(struct work_queue *wq)
 {
 	struct peer *peer = wq->spec.data;
 
+	bgp_clear_node_queue_untrack(peer);
+
 	/* Tickle FSM to start moving again */
 	BGP_EVENT_ADD(peer, Clearing_Completed);
 
@@ -3967,6 +3969,96 @@ static void bgp_clear_node_queue_init(struct peer *peer)
 	peer->clear_node_queue->spec.data = peer;
 }
 
+<<<<<<< HEAD
+=======
+/*
+ * True when the queue holds the bgp_clear_route() peer lock: it is scheduled
+ * or still has items. Track and drain must use the same test. If they
+ * diverge, a peer is tracked with no lock to drop, or unlocked without one.
+ */
+static bool bgp_clear_node_queue_pending(struct work_queue *wq)
+{
+	return wq && (work_queue_is_scheduled(wq) || !work_queue_empty(wq));
+}
+
+bool bgp_clear_node_queue_drain(struct peer *peer)
+{
+	struct work_queue *wq;
+	struct work_queue_item *item;
+	bool need_peer_unlock = false;
+
+	if (!peer || !peer->clear_node_queue)
+		return false;
+
+	wq = peer->clear_node_queue;
+	need_peer_unlock = bgp_clear_node_queue_pending(wq);
+
+	/*
+	 * During daemon termination we need the clear-route work to run
+	 * synchronously before queue teardown, otherwise we only drop refs.
+	 *
+	 * This is intentionally done this way because we are trying to cleanup
+	 * memory on shutdown and these items need to be handled no matter what.
+	 */
+	if (bm->terminating && wq->spec.workfunc) {
+		STAILQ_FOREACH (item, &wq->items, wq)
+			wq->spec.workfunc(wq, item->data);
+	}
+
+	work_queue_free_and_null(&peer->clear_node_queue);
+	return need_peer_unlock;
+}
+
+/*
+ * A peer deleted outside shutdown (e.g. a dynamic neighbor whose session
+ * dropped) is removed from bgp->peer but stays allocated until its
+ * clear-node queue completes, because that queue holds a peer lock and the
+ * peer holds a lock on its bgp instance. Record such peers so that
+ * shutdown can still find and drain them; otherwise a SIGTERM that lands
+ * before the queue runs leaks the peer and, through it, the whole instance.
+ */
+void bgp_clear_node_queue_track(struct peer *peer)
+{
+	struct work_queue *wq = peer->clear_node_queue;
+
+	/*
+	 * peer_delete() asserts the session is not already Deleted, so this
+	 * runs at most once per peer. The node pointer replaces the lookup.
+	 */
+	if (peer->clearing_node || !bm->clearing_peers ||
+	    !bgp_clear_node_queue_pending(wq))
+		return;
+
+	peer->clearing_node = listnode_add(bm->clearing_peers, peer);
+}
+
+void bgp_clear_node_queue_untrack(struct peer *peer)
+{
+	if (!peer->clearing_node)
+		return;
+
+	list_delete_node(bm->clearing_peers, peer->clearing_node);
+	peer->clearing_node = NULL;
+}
+
+/*
+ * Shutdown only: finish the clear-node work of every tracked peer and drop
+ * the peer lock that bgp_clear_node_complete() would have dropped.
+ */
+void bgp_clear_node_queue_drain_orphans(void)
+{
+	struct peer *peer;
+
+	assert(bm->terminating);
+
+	while ((peer = listnode_head(bm->clearing_peers))) {
+		bgp_clear_node_queue_untrack(peer);
+		if (bgp_clear_node_queue_drain(peer))
+			peer_unlock(peer); /* bgp_clear_route */
+	}
+}
+
+>>>>>>> 7c25b46acc (NOS-23263: [bgpd] drain deleted peers' clear-node queues at shutdown (#438))
 static void bgp_clear_route_table(struct peer *peer, afi_t afi, safi_t safi,
 				  struct bgp_table *table)
 {
